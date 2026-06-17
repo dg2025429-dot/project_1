@@ -1,46 +1,33 @@
 import streamlit as st
 import pandas as pd
 from pathlib import Path
+import plotly.express as px
 
 st.title("🤖 AI 혼잡도 분석")
 
-@st.cache_data
-def load_data():
-csv_path = Path(**file**).parent.parent / "서울교통공사_지하철혼잡도정보_20260331.csv"
+csv_file = Path(**file**).parent.parent / "서울교통공사_지하철혼잡도정보_20260331.csv"
 
-```
 try:
-    df = pd.read_csv(csv_path, encoding="cp949")
+df = pd.read_csv(csv_file, encoding="cp949")
 except:
-    df = pd.read_csv(csv_path, encoding="utf-8")
+df = pd.read_csv(csv_file, encoding="utf-8")
 
 time_cols = df.columns[5:]
 
 for col in time_cols:
-    df[col] = pd.to_numeric(df[col], errors="coerce")
+df[col] = pd.to_numeric(df[col], errors="coerce")
 
-return df
-```
+# 전체 평균 혼잡도
 
-df = load_data()
+avg_by_time = df[time_cols].mean()
 
-time_cols = df.columns[5:]
+peak_time = avg_by_time.idxmax()
+peak_value = round(avg_by_time.max(), 1)
 
-mean_time = df[time_cols].mean()
+lowest_time = avg_by_time.idxmin()
+lowest_value = round(avg_by_time.min(), 1)
 
-peak_time = mean_time.idxmax()
-peak_value = round(float(mean_time.max()), 1)
-
-station_mean = (
-df.groupby("출발역")[time_cols]
-.mean()
-.mean(axis=1)
-)
-
-peak_station = station_mean.idxmax()
-peak_station_value = round(float(station_mean.max()), 1)
-
-st.subheader("📊 핵심 분석 결과")
+st.subheader("📊 혼잡도 핵심 분석")
 
 col1, col2 = st.columns(2)
 
@@ -53,55 +40,88 @@ peak_value
 
 with col2:
 st.metric(
-"가장 붐비는 역",
-peak_station,
-peak_station_value
+"가장 한산한 시간",
+lowest_time,
+lowest_value
 )
 
-morning_cols = [
-c for c in time_cols
-if ("7시" in c) or ("8시" in c)
+# 시간대 그래프
+
+chart_df = pd.DataFrame({
+"시간": avg_by_time.index,
+"평균혼잡도": avg_by_time.values
+})
+
+fig = px.line(
+chart_df,
+x="시간",
+y="평균혼잡도",
+markers=True,
+title="서울 지하철 평균 혼잡도 추이"
+)
+
+st.plotly_chart(
+fig,
+use_container_width=True
+)
+
+# 역별 평균
+
+station_df = (
+df.groupby("출발역")[time_cols]
+.mean()
+.mean(axis=1)
+.reset_index()
+)
+
+station_df.columns = [
+"출발역",
+"평균혼잡도"
 ]
 
-evening_cols = [
-c for c in time_cols
-if ("18시" in c) or ("19시" in c)
-]
+top_station = station_df.sort_values(
+"평균혼잡도",
+ascending=False
+).iloc[0]
 
-morning_avg = round(
-float(df[morning_cols].mean().mean()),
-1
+st.subheader("🏆 가장 혼잡한 역")
+
+st.success(
+f"{top_station['출발역']} (평균 혼잡도 {top_station['평균혼잡도']:.1f})"
 )
 
-evening_avg = round(
-float(df[evening_cols].mean().mean()),
-1
+# TOP10 역
+
+top10 = station_df.sort_values(
+"평균혼잡도",
+ascending=False
+).head(10)
+
+fig2 = px.bar(
+top10,
+x="평균혼잡도",
+y="출발역",
+orientation="h",
+title="평균 혼잡도 TOP10 역"
 )
 
-st.subheader("🚇 출퇴근 혼잡도 비교")
-
-c1, c2 = st.columns(2)
-
-c1.metric(
-"출근시간 평균",
-morning_avg
+st.plotly_chart(
+fig2,
+use_container_width=True
 )
 
-c2.metric(
-"퇴근시간 평균",
-evening_avg
-)
+# AI 분석 문장
 
 st.subheader("💡 AI 인사이트")
 
 st.info(
 f"""
-가장 붐비는 시간은 {peak_time} 입니다.
+• 가장 붐비는 시간은 {peak_time} 입니다.
 
-가장 혼잡한 역은 {peak_station} 입니다.
+• 가장 한산한 시간은 {lowest_time} 입니다.
 
-출근시간 평균 혼잡도는 {morning_avg} 입니다.
+• 가장 혼잡한 역은 {top_station['출발역']} 입니다.
 
-퇴근시간 평균 혼잡도는 {evening_avg} 입니다.
+• 출퇴근 시간대에 이용객이 집중되는 경향을 확인할 수 있습니다.
 """
 )
