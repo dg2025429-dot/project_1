@@ -4,39 +4,50 @@ import plotly.express as px
 
 @st.cache_data
 def load_data():
-    return pd.read_csv(
-        "data/서울교통공사_지하철혼잡도정보_20260331.csv",
+
+    df = pd.read_csv(
+        "서울교통공사_지하철혼잡도정보_20260331.csv",
         encoding="cp949"
     )
+
+    time_cols = df.columns[5:]
+
+    for col in time_cols:
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
+    return df
 
 df = load_data()
 
 time_cols = df.columns[5:]
 
-st.title("🚉 역별 혼잡도 조회")
+st.title("🚉 역별 혼잡도 분석")
 
-c1,c2,c3,c4 = st.columns(4)
-
-weekday = c1.selectbox(
+weekday = st.selectbox(
     "요일",
     sorted(df["요일구분"].unique())
 )
 
-line = c2.selectbox(
+line = st.selectbox(
     "호선",
     sorted(df["호선"].unique())
 )
 
-station = c3.selectbox(
-    "역",
-    sorted(
-        df[df["호선"]==line]["출발역"].unique()
-    )
+stations = sorted(
+    df[df["호선"]==line]["출발역"].unique()
 )
 
-direction = c4.selectbox(
+station = st.selectbox(
+    "역 선택",
+    stations
+)
+
+direction = st.selectbox(
     "상하구분",
-    ["상선","하선"]
+    sorted(df["상하구분"].unique())
 )
 
 filtered = df[
@@ -46,32 +57,51 @@ filtered = df[
     (df["상하구분"]==direction)
 ]
 
-row = filtered.iloc[0]
+if len(filtered)==0:
 
-chart_df = pd.DataFrame({
-    "시간":time_cols,
-    "혼잡도":row[time_cols].values
-})
+    st.warning(
+        "선택한 조건의 데이터가 없습니다."
+    )
 
-fig = px.line(
-    chart_df,
-    x="시간",
-    y="혼잡도",
-    markers=True
-)
+else:
 
-fig.update_layout(
-    height=600
-)
+    row = filtered.iloc[0]
 
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
+    chart_df = pd.DataFrame({
+        "시간": time_cols,
+        "혼잡도": row[time_cols].values
+    })
 
-max_idx = chart_df["혼잡도"].idxmax()
+    fig = px.line(
+        chart_df,
+        x="시간",
+        y="혼잡도",
+        markers=True
+    )
 
-st.success(
-    f"최대 혼잡 시간 : {chart_df.loc[max_idx,'시간']} "
-    f"({chart_df.loc[max_idx,'혼잡도']:.1f})"
-)
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    max_time = chart_df.loc[
+        chart_df["혼잡도"].idxmax()
+    ]
+
+    min_time = chart_df.loc[
+        chart_df["혼잡도"].idxmin()
+    ]
+
+    c1,c2 = st.columns(2)
+
+    c1.metric(
+        "최대 혼잡 시간",
+        max_time["시간"],
+        round(max_time["혼잡도"],1)
+    )
+
+    c2.metric(
+        "최소 혼잡 시간",
+        min_time["시간"],
+        round(min_time["혼잡도"],1)
+    )
