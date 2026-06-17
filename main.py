@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pathlib import Path
 
 st.set_page_config(
     page_title="서울 지하철 혼잡도 분석",
@@ -8,60 +9,90 @@ st.set_page_config(
     layout="wide"
 )
 
+# --------------------------
+# 데이터 로드
+# --------------------------
+
 @st.cache_data
 def load_data():
+
+    file_path = Path(
+        "서울교통공사_지하철혼잡도정보_20260331.csv"
+    )
+
     df = pd.read_csv(
-        "data/서울교통공사_지하철혼잡도정보_20260331.csv",
+        file_path,
         encoding="cp949"
     )
+
+    time_cols = df.columns[5:]
+
+    for col in time_cols:
+        df[col] = pd.to_numeric(
+            df[col],
+            errors="coerce"
+        )
+
     return df
 
 df = load_data()
 
 time_cols = df.columns[5:]
 
-st.title("🚇 서울 지하철 혼잡도 분석 플랫폼")
-
+# --------------------------
 # KPI
-col1,col2,col3,col4 = st.columns(4)
+# --------------------------
 
-with col1:
-    st.metric("역 수", df["출발역"].nunique())
+st.title("🚇 서울 지하철 혼잡도 분석")
 
-with col2:
-    st.metric("노선 수", df["호선"].nunique())
+c1,c2,c3,c4 = st.columns(4)
 
-with col3:
-    st.metric("시간대", len(time_cols))
+c1.metric(
+    "역 수",
+    df["출발역"].nunique()
+)
 
-with col4:
-    st.metric("총 데이터", f"{len(df):,}")
+c2.metric(
+    "호선 수",
+    df["호선"].nunique()
+)
+
+c3.metric(
+    "시간대",
+    len(time_cols)
+)
+
+c4.metric(
+    "데이터 행 수",
+    f"{len(df):,}"
+)
 
 st.divider()
 
-# 혼잡도 TOP10
-st.subheader("🔥 평균 혼잡도 TOP10 역")
+# --------------------------
+# TOP10
+# --------------------------
 
-avg_df = (
+station_mean = (
     df.groupby("출발역")[time_cols]
-    .mean()
-    .mean(axis=1)
-    .reset_index()
+      .mean()
+      .mean(axis=1)
+      .sort_values(ascending=False)
+      .head(10)
+      .reset_index()
 )
 
-avg_df.columns = ["출발역","평균혼잡도"]
-avg_df = avg_df.sort_values(
-    "평균혼잡도",
-    ascending=False
-).head(10)
+station_mean.columns = [
+    "출발역",
+    "평균혼잡도"
+]
 
 fig = px.bar(
-    avg_df,
+    station_mean,
     x="평균혼잡도",
     y="출발역",
     orientation="h",
-    text_auto=".1f",
-    height=500
+    title="혼잡도 TOP10"
 )
 
 st.plotly_chart(
@@ -69,4 +100,26 @@ st.plotly_chart(
     use_container_width=True
 )
 
-st.info("좌측 메뉴에서 상세 분석을 선택하세요.")
+# --------------------------
+# 전체 평균 추세
+# --------------------------
+
+avg_time = df[time_cols].mean()
+
+chart_df = pd.DataFrame({
+    "시간": avg_time.index,
+    "혼잡도": avg_time.values
+})
+
+fig2 = px.line(
+    chart_df,
+    x="시간",
+    y="혼잡도",
+    markers=True,
+    title="서울 전체 평균 혼잡도"
+)
+
+st.plotly_chart(
+    fig2,
+    use_container_width=True
+)
