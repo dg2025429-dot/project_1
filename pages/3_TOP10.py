@@ -53,6 +53,23 @@ selected_time,
 ascending=False
 ).head(10)
 
+col1, col2 = st.columns(2)
+
+with col1:
+st.metric(
+"1위 역",
+rank_df.iloc[0]["출발역"]
+)
+
+with col2:
+st.metric(
+"최대 혼잡도",
+round(
+float(rank_df.iloc[0][selected_time]),
+1
+)
+)
+
 fig = px.bar(
 rank_df,
 x=selected_time,
@@ -64,7 +81,9 @@ title=f"{selected_time} 기준 TOP10 혼잡역"
 
 fig.update_layout(
 height=600,
-yaxis={"categoryorder":"total ascending"}
+yaxis={
+"categoryorder": "total ascending"
+}
 )
 
 st.plotly_chart(
@@ -72,7 +91,20 @@ fig,
 use_container_width=True
 )
 
+st.subheader("📋 TOP10 상세 데이터")
+
 st.dataframe(
 rank_df,
 use_container_width=True
+)
+
+csv = rank_df.to_csv(
+index=False
+).encode("utf-8-sig")
+
+st.download_button(
+label="📥 TOP10 CSV 다운로드",
+data=csv,
+file_name="top10_station.csv",
+mime="text/csv"
 )
