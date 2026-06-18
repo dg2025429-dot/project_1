@@ -1,16 +1,27 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pathlib import Path
 
+st.set_page_config(layout="wide")
+
+# ------------------
+# 데이터 로드
+# ------------------
 @st.cache_data
 def load_data():
 
+    csv_path = (
+        Path(__file__).parent.parent
+        / "서울교통공사_지하철혼잡도정보_20260331.csv"
+    )
+
     df = pd.read_csv(
-        "서울교통공사_지하철혼잡도정보_20260331.csv",
+        csv_path,
         encoding="cp949"
     )
 
-    time_cols = df.columns[5:]
+    time_cols = list(df.columns[5:])
 
     for col in time_cols:
         df[col] = pd.to_numeric(
@@ -18,90 +29,127 @@ def load_data():
             errors="coerce"
         )
 
-    return df
+    return df, time_cols
 
-df = load_data()
 
-time_cols = df.columns[5:]
+df, time_cols = load_data()
 
 st.title("🚉 역별 혼잡도 분석")
 
-weekday = st.selectbox(
-    "요일",
-    sorted(df["요일구분"].unique())
-)
+# ------------------
+# 필터 영역
+# ------------------
 
-line = st.selectbox(
-    "호선",
-    sorted(df["호선"].unique())
-)
+col1, col2, col3, col4 = st.columns(4)
 
-stations = sorted(
-    df[df["호선"]==line]["출발역"].unique()
-)
+with col1:
+    weekday = st.selectbox(
+        "요일",
+        sorted(df["요일구분"].unique())
+    )
 
-station = st.selectbox(
-    "역 선택",
-    stations
-)
+with col2:
+    line = st.selectbox(
+        "호선",
+        sorted(df["호선"].unique())
+    )
 
-direction = st.selectbox(
-    "상하구분",
-    sorted(df["상하구분"].unique())
-)
+with col3:
+
+    station_list = sorted(
+        df[df["호선"] == line]["출발역"].unique()
+    )
+
+    station = st.selectbox(
+        "역 선택",
+        station_list
+    )
+
+with col4:
+    direction = st.selectbox(
+        "상하구분",
+        sorted(df["상하구분"].unique())
+    )
+
+# ------------------
+# 데이터 필터링
+# ------------------
 
 filtered = df[
-    (df["요일구분"]==weekday)&
-    (df["호선"]==line)&
-    (df["출발역"]==station)&
-    (df["상하구분"]==direction)
+    (df["요일구분"] == weekday)
+    & (df["호선"] == line)
+    & (df["출발역"] == station)
+    & (df["상하구분"] == direction)
 ]
 
-if len(filtered)==0:
+if filtered.empty:
 
-    st.warning(
-        "선택한 조건의 데이터가 없습니다."
-    )
+    st.error("선택한 조건의 데이터가 없습니다.")
+    st.stop()
 
-else:
+row = filtered.iloc[0]
 
-    row = filtered.iloc[0]
-
-    chart_df = pd.DataFrame({
+chart_df = pd.DataFrame(
+    {
         "시간": time_cols,
         "혼잡도": row[time_cols].values
-    })
+    }
+)
 
-    fig = px.line(
-        chart_df,
-        x="시간",
-        y="혼잡도",
-        markers=True
+# ------------------
+# KPI
+# ------------------
+
+max_idx = chart_df["혼잡도"].idxmax()
+min_idx = chart_df["혼잡도"].idxmin()
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "최대 혼잡도",
+        f"{chart_df.loc[max_idx,'혼잡도']:.1f}"
     )
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    max_time = chart_df.loc[
-        chart_df["혼잡도"].idxmax()
-    ]
-
-    min_time = chart_df.loc[
-        chart_df["혼잡도"].idxmin()
-    ]
-
-    c1,c2 = st.columns(2)
-
-    c1.metric(
+with col2:
+    st.metric(
         "최대 혼잡 시간",
-        max_time["시간"],
-        round(max_time["혼잡도"],1)
+        chart_df.loc[max_idx,"시간"]
     )
 
-    c2.metric(
-        "최소 혼잡 시간",
-        min_time["시간"],
-        round(min_time["혼잡도"],1)
+with col3:
+    st.metric(
+        "평균 혼잡도",
+        f"{chart_df['혼잡도'].mean():.1f}"
+    )
+
+# ------------------
+# 그래프
+# ------------------
+
+fig = px.line(
+    chart_df,
+    x="시간",
+    y="혼잡도",
+    markers=True,
+    title=f"{line} {station} ({direction}) 시간대별 혼잡도"
+)
+
+fig.update_layout(
+    height=600
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# ------------------
+# 원본 데이터
+# ------------------
+
+with st.expander("데이터 보기"):
+    st.dataframe(
+        chart_df,
+        use_container_width=True
     )
